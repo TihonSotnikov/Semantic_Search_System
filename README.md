@@ -1,2 +1,31 @@
-# Semantic_Search_System
-Prototype search engine that indexes a small collection of text documents and retrieves the most relevant ones based on semantic similarity to a user query. Focuses on basic indexing, vectorization, and similarity scoring to demonstrate core information retrieval concepts.
+# 🔍 Система семантического поиска по корпоративной базе знаний
+
+## 📝 Описание проекта
+Данный веб-сервис будет реализовывать технологию семантического поиска в базе данных при помощи NLP (Natural Language Processing) и векторного представления данных.
+
+## 🚧 Проект находится в стадии разработки
+
+## ⚙️ Стек технологий (предварительный)
+* **Язык:** Python 3.10+
+* **ML / NLP:** `sentence-transformers`
+* **Бэкенд:** FastAPI (выбран за встроенную документацию Swagger для тестирования API)
+* **База данных:** PostgreSQL + SQLAlchemy
+* **Фронтенд:** HTML / CSS / JavaScript (или Streamlit)
+
+## 📁 Структура проекта
+```text
+Semantic_Search_System/
+│
+├── data/                   # Синтетический датасет (документы для загрузки)
+├── src/                    
+│   ├── ml/
+|   |   └── ml_engine.py        # Логика векторизации и косинусного сходства
+|   |
+|   └── database/
+|       └── database.py     # Сохранение и чтение документов
+|
+├── frontend/               # Файлы веб-интерфейса (index.html, style.css)
+├── main.py                 # Основной файл FastAPI (эндпоинты)
+├── requirements.txt        # Список зависимостей Python
+└── README.md               # Документация проекта
+```
