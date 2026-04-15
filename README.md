@@ -25,6 +25,9 @@ Semantic_Search_System/
 |       └── database.py     # Сохранение и чтение документов
 |
 ├── frontend/               # Файлы веб-интерфейса (index.html, style.css)
+├── docs
+│   ├── plan.md             # План разработки и взаимодействия
+│   └── responsibilities.md # Распределение обязанностей
 ├── main.py                 # Основной файл FastAPI (эндпоинты)
 ├── requirements.txt        # Список зависимостей Python
 └── README.md               # Документация проекта
