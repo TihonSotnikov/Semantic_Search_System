@@ -1,16 +1,30 @@
 # 🔍 Система семантического поиска по корпоративной базе знаний
 
 ## 📝 Описание проекта
-Данный веб-сервис будет реализовывать технологию семантического поиска в базе данных при помощи NLP (Natural Language Processing) и векторного представления данных.
+Данный веб-сервис реализует технологию семантического поиска в базе данных при помощи NLP (Natural Language Processing) и векторного представления данных.
 
 ## 🚧 Проект находится в стадии разработки
 
-## ⚙️ Стек технологий (предварительный)
+## ⚙️ Стек технологий
 * **Язык:** Python 3.10+
-* **ML / NLP:** `sentence-transformers`
-* **Бэкенд:** Uvicorn + FastAPI (выбран за встроенную документацию Swagger для тестирования API)
+* **ML / NLP:** `sentence-transformers` (модель: `cointegrated/rubert-tiny2`)
+* **Бэкенд:** Uvicorn + FastAPI
 * **База данных:** SQLite (json-файлы для ранней разработки)
-* **Фронтенд:** HTML / CSS / JavaScript (или Streamlit)
+* **Фронтенд:** HTML / CSS / JavaScript
+
+## 🚀 Установка и запуск
+
+1. Создание виртуального окружения:
+```bash
+python -m venv .venv
+```
+2. Активация окружения:
+* Windows: `.venv\Scripts\activate`
+* macOS/Linux: `source .venv/bin/activate`
+3. Установка зависимостей:
+```bash
+pip install -r requirements.txt
+```
 
 ## 📁 Структура проекта
 ```text
