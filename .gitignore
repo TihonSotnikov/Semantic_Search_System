@@ -208,3 +208,7 @@ __marimo__/
 
 # Heavy files
 # data/*
+
+# uv
+.python-version
+pyproject.toml
