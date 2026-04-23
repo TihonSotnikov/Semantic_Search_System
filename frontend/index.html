@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Семантический поиск</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+        }
+
+        h1 {
+            margin-bottom: 30px;
+            color: #333;
+            text-align: center;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        #query {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        #query:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #764ba2;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .results {
+            margin-top: 30px;
+            min-height: 100px;
+        }
+
+        .result-item {
+            padding: 16px;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            background: #f9f9f9;
+            transition: box-shadow 0.3s;
+        }
+
+        .result-item:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .result-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .result-text {
+            color: #555;
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .result-score {
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        .loading {
+            color: #667eea;
+            font-style: italic;
+        }
+
+        .no-results {
+            color: #999;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .error {
+            color: #d32f2f;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Поиск по базе знаний</h1>
+        <div class="search-box">
+            <input
+                type="text"
+                id="query"
+                placeholder="Введите запрос..."
+                autocomplete="off"
+            >
+            <button onclick="performSearch()">Поиск</button>
+        </div>
+        <div id="results" class="results"></div>
+    </div>
+
+    <script>
+        async function performSearch() {
+            const query = document.getElementById('query').value.trim();
+            if (!query) return;
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p class="loading">Поиск...</p>';
+
+            try {
+                const response = await fetch(
+                    `/search?query=${encodeURIComponent(query)}`
+                );
+
+                if (!response.ok) {
+                    resultsDiv.innerHTML =
+                        '<p class="error">Ошибка сервера</p>';
+                    return;
+                }
+
+                const responseData = await response.json();
+                const results = responseData.results;
+
+                if (results.length === 0) {
+                    resultsDiv.innerHTML =
+                        '<p class="no-results">Результатов не найдено</p>';
+                    return;
+                }
+
+                let html = '';
+                for (const result of results) {
+                    const percentage = (result.score * 100).toFixed(1);
+                    html += `
+                        <div class="result-item">
+                            <div class="result-title">${
+                                escapeHtml(result.title)
+                            }</div>
+                            <div class="result-text">${
+                                escapeHtml(result.text)
+                            }</div>
+                            <div class="result-score">
+                                Совпадение: ${percentage}%
+                            </div>
+                        </div>
+                    `;
+                }
+                resultsDiv.innerHTML = html;
+            } catch (error) {
+                resultsDiv.innerHTML =
+                    '<p class="error">Ошибка подключения</p>';
+                console.error('Search error:', error);
+            }
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // Поиск при нажатии Enter
+        document.getElementById('query').addEventListener(
+            'keypress',
+            function(event) {
+                if (event.key === 'Enter') {
+                    performSearch();
+                }
+            }
+        );
+    </script>
+</body>
+</html>
