@@ -17,7 +17,7 @@ class TensorType(TypeDecorator):
 
     def process_bind_param(self, value: Tensor | None, dialect: Dialect) -> Any:
         if value is not None:
-            return value.detach().cpu().numpy().tobytes()
+            return value.detach().cpu().numpy().astype(np.float32).tobytes()
         return None
     
     def process_result_value(self, value: bytes | None, dialect: Dialect) -> Tensor | None:
@@ -30,5 +30,6 @@ class TensorType(TypeDecorator):
 class Knowledge(Base):
     __tablename__ = "Knowledge"
     id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column()
     text: Mapped[str] = mapped_column()
     vector: Mapped[Tensor] = mapped_column(TensorType)
