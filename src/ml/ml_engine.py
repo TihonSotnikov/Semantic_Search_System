@@ -18,7 +18,7 @@ def load_model(model_name: str = "cointegrated/rubert-tiny2") -> SentenceTransfo
         Инициализированная модель.
     """
 
-    return SentenceTransformer(model_name)
+    return SentenceTransformer(model_name, trust_remote_code=True)
 
 
 def compute_embeddings(texts: List[str], model: SentenceTransformer) -> torch.Tensor:
@@ -78,6 +78,6 @@ def search_similar_texts(
 
     results = []
     for score, idx in zip(top_results[0], top_results[1]):
-        results.append((corpus_texts[idx.item()], score.item()))
+        results.append((corpus_texts[idx.item()], score.item())) # type: ignore
 
     return results
