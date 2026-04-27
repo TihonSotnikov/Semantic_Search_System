@@ -1,15 +1,14 @@
 import logging
-import datetime
-import torch
 import os
 import json
+from contextlib import asynccontextmanager
 
+import torch
 from fastapi import FastAPI, HTTPException, status
 from fastapi.requests import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select, update, insert, delete
 
@@ -17,12 +16,17 @@ import src.database.database as db
 import src.ml.ml_engine as ml
 
 
+ROOT = os.path.dirname(__file__)
+MODELS = {
+    'gte': 'Alibaba-NLP/gte-multilingual-base',
+    'default' : 'cointegrated/rubert-tiny2'
+    }
+
 engine = create_async_engine('sqlite+aiosqlite:///data.db')
 session_maker = async_sessionmaker(engine, expire_on_commit=False)
-model = ml.load_model('Alibaba-NLP/gte-multilingual-base')
+model = ml.load_model(MODELS['default'])
 templates = Jinja2Templates('frontend')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-ROOT = os.path.dirname(__file__)
 
 
 @asynccontextmanager
@@ -108,11 +112,11 @@ async def search(request: Request, text = None):
         data = await session.scalars(stmt)
         data = data.all()
 
-        docs = []
-        embs = []
+        documents = []
+        embeddings = []
         for row in data:
-            docs.append(row.text)
-            embs.append(row.vector)
-        embs = torch.stack(embs).to(device)
-        results = ml.search_similar_texts(text, docs, embs, model)
+            documents.append(row.text)
+            embeddings.append(row.vector)
+        embeddings = torch.stack(embeddings).to(device)
+        results = ml.search_similar_texts(text, documents, embeddings, model)
         return results
