@@ -14,6 +14,18 @@
 
 ## 🚀 Установка и запуск
 
+### Менеджер окружений
+1. Установка `uv`: [Инструкция](https://docs.astral.sh/uv/getting-started/installation/)
+2. Подключение виртуального окружения и скачивание зависимостей:
+```sh
+uv sync
+```
+3. Запуск:
+```sh
+uv run uvicorn main:app --port 8000
+```
+
+### Legacy
 1. Создание виртуального окружения:
 ```bash
 python -m venv .venv
