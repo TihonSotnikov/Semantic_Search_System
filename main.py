@@ -78,13 +78,14 @@ async def database_reset(request: Request):
     return {'message': 'Success'}
 
 @app.post('/add_document')
-async def add_document(text = None):
-    if not text:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, 'No text provided')
+async def add_document(title: str | None = None, text: str | None = None):
+    if not (text and title):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, 'No text or title provided')
     async with session_maker() as session:
         vector = ml.compute_embeddings([text], model)[0]
         value = db.Knowledge(
             text = text,
+            title = title,
             vector = vector
         )
 
