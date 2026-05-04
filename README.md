@@ -22,10 +22,10 @@ uv sync
 ```
 3. Запуск:
 ```sh
-uv run uvicorn main:app --port 8000
+uv run uvicorn main:app --port 80
 ```
 
-### [Вариант 2] Legacy
+### [Вариант 2] Legacy (не рекомендуется)
 1. Создание виртуального окружения:
 ```bash
 python -m venv .venv
@@ -39,18 +39,19 @@ pip install -r requirements.txt
 ```
 4. Запуск:
 ```sh
-uvicorn main:app --port 8000
+uvicorn main:app --port 80
 ```
 
 ### Тестирование и использование
 
 Подключение:
-1. Взаимодействие с API в браузере: `127.0.0.1:8000/docs` (Swagger)
+1. Взаимодействие с API в браузере: `127.0.0.1/docs` (Swagger)
 2. Либо HTTP-запрос (`curl`) на эндпоинты: \
 GET `/dump` − Запросить базу знаний в json-формате \
 POST `/add_document?title=<Заголовок>&text=<Текст>` − Добавить свой текст в базу \
 POST `/reset` − Очистить базу и импортировать из файла data.json \
 GET `/search?text=<Текст>` − Сделать поисковой запрос
+3. Веб-интерфейс: перейти по адресу `127.0.0.1` (Перед этим нужно импортировать базу запросом `/reset`)
 
 ## 📁 Структура проекта
 ```text
@@ -61,14 +62,19 @@ Semantic_Search_System/
 │   ├── ml/
 |   |   └── ml_engine.py    # Логика векторизации и косинусного сходства
 |   |
-|   └── database/
-|       └── database.py     # Сохранение и чтение документов
+|   ├── database/
+|   |   └── database.py     # Сохранение и чтение документов
+|   |
+|   └── frontend/
+|       ├── static/         # Статические файлы: скрипты, стили, медиа
+|       ├── templates/      # HTML шаблоны
+|       └── frontend.py     # Эндпоинты для браузера
 |
-├── frontend/               # Файлы веб-интерфейса (index.html, style.css)
 ├── docs
 │   ├── plan.md             # План разработки и взаимодействия
 │   └── responsibilities.md # Распределение обязанностей
 ├── main.py                 # Основной файл FastAPI (эндпоинты)
 ├── requirements.txt        # Список зависимостей Python
+├── pyproject.toml          # Конфигурация окружения для менеджеров (uv)
 └── README.md               # Документация проекта
 ```
