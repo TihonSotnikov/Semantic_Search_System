@@ -28,6 +28,9 @@ model = ml.load_model(MODELS['default'])
 templates = Jinja2Templates('frontend')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# Настройка размера батча
+BATCH_SIZE = 1000
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -105,19 +108,44 @@ async def dump_data(request: Request):
         return result
 
 @app.get('/search')
-async def search(request: Request, text = None):
+async def search(request: Request, text: str = None, k: int = 3):
     if not text:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, 'No text provided')
-    async with session_maker() as session:
-        stmt = select(db.Knowledge)
-        data = await session.scalars(stmt)
-        data = data.all()
+    
+    # 1. Готовим эмбеддинг запроса один раз
+    query_embedding = ml.encode_query(model, text).to(device)
+    
+    top_k_heap = []
 
-        documents = []
-        embeddings = []
-        for row in data:
-            documents.append(row.text)
-            embeddings.append(row.vector)
-        embeddings = torch.stack(embeddings).to(device)
-        results = ml.search_similar_texts(text, documents, embeddings, model)
-        return results
+    async with session_maker() as session:
+        # 2. Используем потоковое получение данных (stream)
+        result_stream = await session.stream(select(db.Knowledge))
+        
+        async for partition in result_stream.partitions(BATCH_SIZE):
+            batch_texts = []
+            batch_vectors = []
+            
+            for row in partition:
+                # row - это tuple из одного элемента (объекта Knowledge)
+                obj = row[0]
+                batch_texts.append(obj.text)
+                batch_vectors.append(obj.vector)
+            
+            if not batch_vectors:
+                continue
+                
+            # 3. Скоринг батча
+            embeddings_tensor = torch.stack(batch_vectors).to(device)
+            scores = ml.compute_batch_scores(query_embedding, embeddings_tensor)
+            
+            # 4. Инкрементальное обновление Top-K
+            top_k_heap = ml.select_top_k(top_k_heap, scores, batch_texts, k)
+
+    # 5. Финальная сортировка и форматирование результата
+    final_results = sorted(
+        [(text, score) for score, text in top_k_heap], 
+        key=lambda x: x[1], 
+        reverse=True
+    )
+    
+    return final_results

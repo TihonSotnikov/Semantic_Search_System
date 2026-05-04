@@ -1,5 +1,6 @@
 import torch
 from sentence_transformers import SentenceTransformer, util
+import heapq
 from typing import List, Tuple
 
 
@@ -41,6 +42,38 @@ def compute_embeddings(texts: List[str], model: SentenceTransformer) -> torch.Te
     return model.encode(texts, convert_to_tensor=True)
 
 
+def encode_query(model: SentenceTransformer, query: str) -> torch.Tensor:
+    """Кодирование запроса в вектор."""
+    return model.encode(query, convert_to_tensor=True)
+
+
+def compute_batch_scores(
+    query_embedding: torch.Tensor, 
+    batch_embeddings: torch.Tensor
+) -> torch.Tensor:
+    """Вычисление косинусного сходства для батча."""
+    return util.cos_sim(query_embedding, batch_embeddings)[0]
+
+
+def select_top_k(
+    existing_top_k: List[Tuple[float, str]], 
+    scores: torch.Tensor, 
+    texts: List[str], 
+    k: int
+) -> List[Tuple[float, str]]:
+    """
+    Обновление списка top-k с использованием min-heap.
+    Храним (score, text), чтобы heapq сравнивал по score.
+    """
+    for score, text in zip(scores.tolist(), texts):
+        if len(existing_top_k) < k:
+            heapq.heappush(existing_top_k, (score, text))
+        else:
+            if score > existing_top_k[0][0]:
+                heapq.heapreplace(existing_top_k, (score, text))
+    return existing_top_k
+
+
 def search_similar_texts(
     query: str,
     corpus_texts: List[str],
@@ -49,35 +82,11 @@ def search_similar_texts(
     top_k: int = 3
 ) -> List[Tuple[str, float]]:
     """
-    Выполняет семантический поиск запроса по векторизованному корпусу.
-
-    Parameters
-    ----------
-    query : str
-        Текст поискового запроса.
-    corpus_texts : List[str]
-        Исходный массив текстов базы знаний.
-    corpus_embeddings : torch.Tensor
-        Предрассчитанные векторы базы знаний.
-    model : SentenceTransformer
-        Загруженная модель векторизации.
-    top_k : int
-        Количество возвращаемых релевантных результатов (по умолчанию 3).
-
-    Returns
-    -------
-    List[Tuple[str, float]]
-        Список результатов в формате (текст_документа, оценка_косинусного_сходства).
+    Совместимая обертка над новыми функциями.
     """
-
-    query_embedding = model.encode(query, convert_to_tensor=True)
-    cos_scores = util.cos_sim(query_embedding, corpus_embeddings)[0]
-
-    k = min(top_k, len(corpus_texts))
-    top_results = torch.topk(cos_scores, k=k)
-
-    results = []
-    for score, idx in zip(top_results[0], top_results[1]):
-        results.append((corpus_texts[idx.item()], score.item())) # type: ignore
-
-    return results
+    q_emb = encode_query(model, query)
+    scores = compute_batch_scores(q_emb, corpus_embeddings)
+    
+    # Для совместимости возвращаем List[Tuple[str, float]]
+    top_k_list = select_top_k([], scores, corpus_texts, top_k)
+    return [(text, score) for score, text in sorted(top_k_list, reverse=True)]
