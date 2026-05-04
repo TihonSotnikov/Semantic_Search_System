@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI + JS ToDo</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='favicon.jpg') }}">
+</head>
+<body>
+    <div class="search-container">
+        <form id="search-form" class="search-form">
+            <input type="text" id="search-input" class="search-input" placeholder="Поиск..." />
+            <button type="submit" class="search-button">Поиск</button>
+        </form>
+        <div id="results" class="results"></div>
+    </div>
+    <script src="{{ url_for('static', path='script.js') }}"></script>
+</body>
+</html>

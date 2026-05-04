@@ -1,7 +1,8 @@
-import torch
-from sentence_transformers import SentenceTransformer, util
 import heapq
 from typing import List, Tuple
+
+import torch
+from sentence_transformers import SentenceTransformer, util
 
 
 def load_model(model_name: str = "cointegrated/rubert-tiny2") -> SentenceTransformer:
@@ -19,7 +20,9 @@ def load_model(model_name: str = "cointegrated/rubert-tiny2") -> SentenceTransfo
         Инициализированная модель.
     """
 
-    return SentenceTransformer(model_name, trust_remote_code=True)
+    model = SentenceTransformer(model_name, trust_remote_code=True)
+    model.max_seq_length = 2048
+    return model
 
 
 def compute_embeddings(texts: List[str], model: SentenceTransformer) -> torch.Tensor:
