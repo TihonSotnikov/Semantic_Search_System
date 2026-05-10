@@ -1,5 +1,5 @@
 import heapq
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 import torch
 from sentence_transformers import SentenceTransformer, util
@@ -59,21 +59,21 @@ def compute_batch_scores(
 
 
 def select_top_k(
-    existing_top_k: List[Tuple[float, str]], 
+    existing_top_k: List[Tuple[float, Any]], 
     scores: torch.Tensor, 
-    texts: List[str], 
+    contents: List[Any], 
     k: int
-) -> List[Tuple[float, str]]:
+) -> List[Tuple[float, Any]]:
     """
     Обновление списка top-k с использованием min-heap.
-    Храним (score, text), чтобы heapq сравнивал по score.
+    Храним (score, data), чтобы heapq сравнивал по score.
     """
-    for score, text in zip(scores.tolist(), texts):
+    for score, data in zip(scores.tolist(), contents):
         if len(existing_top_k) < k:
-            heapq.heappush(existing_top_k, (score, text))
+            heapq.heappush(existing_top_k, (score, data))
         else:
             if score > existing_top_k[0][0]:
-                heapq.heapreplace(existing_top_k, (score, text))
+                heapq.heapreplace(existing_top_k, (score, data))
     return existing_top_k
 
 

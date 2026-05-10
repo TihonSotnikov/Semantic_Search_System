@@ -2,19 +2,22 @@ import logging
 import os
 import json
 from contextlib import asynccontextmanager
+from typing import Any
 
 import torch
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Query
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.engine import CursorResult
 from sqlalchemy import select, update, insert, delete
+from pydantic import BaseModel, Field
 
-import src.database.database as db
-import src.ml.ml_engine as ml
-from src.frontend import frontend
+import database.database as db
+import ml.ml_engine as ml
+from frontend import frontend
 
 
 ROOT = os.path.dirname(__file__)
@@ -24,6 +27,16 @@ MODELS = {
     'gemma': 'google/embeddinggemma-300m'
     }
 BATCH_SIZE = 100
+
+class DocumentSchema(BaseModel):
+    title: str = Field(..., min_length=3, max_length=40)
+    text: str = Field(..., min_length=20, max_length=2000)
+
+class SearchResult(BaseModel):
+    score: float = Field(...)
+    title: str = Field(...)
+    text: str = Field(...)
+
 
 engine = create_async_engine('sqlite+aiosqlite:///data.db')
 session_maker = async_sessionmaker(engine, expire_on_commit=False)
@@ -43,7 +56,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.mount('/static', StaticFiles(directory='src/frontend/static'), name='static')
+app.mount('/static', StaticFiles(directory='frontend/static'), name='static')
 app.include_router(frontend.router)
 
 
@@ -62,7 +75,7 @@ app.include_router(frontend.router)
 async def database_reset(request: Request):
     logger: logging.Logger = request.app.state.logger
     try:
-        with open(os.path.join(ROOT, 'data/data.json'), encoding='utf8') as file:
+        with open(os.path.join(ROOT, '../data/data.json'), encoding='utf8') as file:
             initial_data: list = json.load(file)
             with open(os.path.join(ROOT, 'DEBUG.json'), 'w', encoding='utf8') as f:
                 f.writelines(json.dumps(initial_data))
@@ -88,20 +101,27 @@ async def database_reset(request: Request):
     return {'message': 'Success'}
 
 @app.post('/add_document')
-async def add_document(title: str | None = None, text: str | None = None):
-    if not (text and title):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, 'No text or title provided')
+async def add_document(schema: DocumentSchema):
     async with session_maker() as session:
-        vector = ml.compute_embeddings([text], model)[0]
+        vector = ml.compute_embeddings([schema.text], model)[0]
         value = db.Knowledge(
-            text = text,
-            title = title,
+            text = schema.text,
+            title = schema.title,
             vector = vector
         )
 
         session.add(value)
         await session.commit()
         return status.HTTP_200_OK
+
+@app.delete('/delete_document')
+async def delete_document(id: int):
+    async with session_maker() as session:
+        stmt = delete(db.Knowledge).where(db.Knowledge.id == id)
+        result: CursorResult = await session.execute(stmt) # type: ignore
+        await session.commit()
+        return status.HTTP_200_OK if (result.rowcount > 0) else status.HTTP_304_NOT_MODIFIED
+
 
 @app.get('/dump')
 async def dump_data(request: Request):
@@ -114,11 +134,12 @@ async def dump_data(request: Request):
             logger.info(f'Size of the 1st emb: {result[0].vector.shape}')
         return result
 
-@app.get('/search')
-async def search(request: Request, text: str | None = None, k: int = 3):
+@app.get('/search', response_model=list[SearchResult])
+async def search(request: Request, text: str = Query(...), k: int = 3):
     if not text:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, 'No text provided')
     
+    logger: logging.Logger = request.app.state.logger
     query_embedding = ml.encode_query(model, text).to(device)
     
     top_k_heap = []
@@ -127,11 +148,11 @@ async def search(request: Request, text: str | None = None, k: int = 3):
         result_stream = await session.stream_scalars(select(db.Knowledge))
         
         async for partition in result_stream.partitions(BATCH_SIZE):
-            batch_texts = []
+            batch_data = []
             batch_vectors = []
             
             for row in partition:
-                batch_texts.append(row.text)
+                batch_data.append({'title': row.title, 'text': row.text})
                 batch_vectors.append(row.vector)
             
             if not batch_vectors:
@@ -140,12 +161,13 @@ async def search(request: Request, text: str | None = None, k: int = 3):
             embeddings_tensor = torch.stack(batch_vectors).to(device)
             scores = ml.compute_batch_scores(query_embedding, embeddings_tensor)
             
-            top_k_heap = ml.select_top_k(top_k_heap, scores, batch_texts, k)
+            top_k_heap = ml.select_top_k(top_k_heap, scores, batch_data, k)
 
     final_results = sorted(
-        [(text, score) for score, text in top_k_heap], 
-        key=lambda x: x[1], 
+        [SearchResult(score=score, title=data['title'], text=data['text']) for score, data in top_k_heap], 
+        key=lambda x: x.score, 
         reverse=True
     )
+    logger.info('Results response:\n' + '\n'.join([f'{res.score}: {res.title}' for res in final_results]))
     
     return final_results

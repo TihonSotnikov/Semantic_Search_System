@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block head %}
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+    <div class="admin-dashboard-container">
+        <div class="dashboard-section">
+            <h2>Управление базой</h2>
+            <div class="dashboard-button-grid">
+                <button id="reset-db-button" class="dashboard-button">
+                    Очистить базу <div id="reset-db-status" class="status"></div>
+                </button>
+                <button id="refresh-button" class="dashboard-button">
+                    Обновить список <div id="refresh-status" class="status"></div>
+                </button>
+            </div>
+        </div>
+        <div id="document-viewer" class="dashboard-section">
+            <h2>Просмотр документов</h2>
+            <div id="documents-list" class="dashboard-scrollable">
+                <!-- Список документов будет загружаться сюда -->
+            </div>
+        </div>
+        <div class="dashboard-section">
+            <h2>Добавление документа</h2>
+            <form id="add-document-form" class="dashboard-form">
+                <input type="text" name="title" id="document-title" class="dashboard-input" placeholder="Название документа" required />
+                <textarea id="document-content" name="text" class="dashboard-textarea" placeholder="Содержание документа" required></textarea>
+                <button type="submit" class="dashboard-button">
+                    Добавить документ <div id="add-document-status" class="status"></div>
+                </button>
+            </form>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', path='/js/dashboard.js') }}"></script>
+{% endblock %}
