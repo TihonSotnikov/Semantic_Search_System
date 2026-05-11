@@ -5,10 +5,9 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import torch
-from fastapi import FastAPI, HTTPException, status, Query
+from fastapi import FastAPI, HTTPException, status, Query, UploadFile, File
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
-from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.engine import CursorResult
@@ -74,31 +73,67 @@ app.include_router(frontend.router)
 @app.post('/reset')
 async def database_reset(request: Request):
     logger: logging.Logger = request.app.state.logger
+    
     try:
         with open(os.path.join(ROOT, '../data/data.json'), encoding='utf8') as file:
             initial_data: list = json.load(file)
-            with open(os.path.join(ROOT, 'DEBUG.json'), 'w', encoding='utf8') as f:
-                f.writelines(json.dumps(initial_data))
-            # logger.info(f'Initial data:\n{initial_data}')
-
-        texts = [doc['text'] for doc in initial_data]
-        embeddings = ml.compute_embeddings(texts, model)
-        
-        knowledge_list = [
-            db.Knowledge(title=doc['title'], text=doc['text'], vector=emb)
-            for doc, emb in zip(initial_data, embeddings)
-        ]
-        async with session_maker() as session:
-            stmt = delete(db.Knowledge)
-            await session.execute(stmt)
-            session.add_all(knowledge_list)
-            await session.commit()
-    except HTTPException as e:
-        return e
     except Exception as e:
-        logger.error(e)
-        return {'message': 'Internal error'}
+        logger.error(f'Error loading initial data: {e}')
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, 'Failed to load initial data')
+
+    texts = [doc['text'] for doc in initial_data]
+    embeddings = ml.compute_embeddings(texts, model)
+    
+    knowledge_list = [
+        db.Knowledge(title=doc['title'], text=doc['text'], vector=emb)
+        for doc, emb in zip(initial_data, embeddings)
+    ]
+    async with session_maker() as session:
+        stmt = delete(db.Knowledge)
+        await session.execute(stmt)
+        session.add_all(knowledge_list)
+        await session.commit()
+
     return {'message': 'Success'}
+
+@app.post('/clear')
+async def database_clear(request: Request):
+    logger: logging.Logger = request.app.state.logger
+
+    async with session_maker() as session:
+        stmt = delete(db.Knowledge)
+        await session.execute(stmt)
+        await session.commit()
+
+    return status.HTTP_200_OK
+
+@app.post('/import_data')
+async def import_data(request: Request, files: list[UploadFile] = File(...)):
+    logger: logging.Logger = request.app.state.logger
+    files_failed = []
+
+    async with session_maker() as session:
+        for file in files:
+            try:
+                if file.content_type != 'application/json':
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST, 'Invalid file type')
+                
+                import_data = json.loads(await file.read())
+
+                texts = [doc['text'] for doc in import_data]
+                embeddings = ml.compute_embeddings(texts, model)
+                
+                knowledge_list = [
+                    db.Knowledge(title=doc['title'], text=doc['text'], vector=emb)
+                    for doc, emb in zip(import_data, embeddings)
+                ]
+                session.add_all(knowledge_list)
+            except Exception as e:
+                logger.error(f'Error processing file {file.filename}: {e}')
+                files_failed.append(file.filename)
+        await session.commit()
+        
+    return JSONResponse(status_code=status.HTTP_207_MULTI_STATUS, content={'files_failed': files_failed}) if files_failed else status.HTTP_200_OK
 
 @app.post('/add_document')
 async def add_document(schema: DocumentSchema):
@@ -112,7 +147,7 @@ async def add_document(schema: DocumentSchema):
 
         session.add(value)
         await session.commit()
-        return status.HTTP_200_OK
+    return status.HTTP_200_OK
 
 @app.delete('/delete_document')
 async def delete_document(id: int):
@@ -120,7 +155,7 @@ async def delete_document(id: int):
         stmt = delete(db.Knowledge).where(db.Knowledge.id == id)
         result: CursorResult = await session.execute(stmt) # type: ignore
         await session.commit()
-        return status.HTTP_200_OK if (result.rowcount > 0) else status.HTTP_304_NOT_MODIFIED
+    return status.HTTP_200_OK if (result.rowcount > 0) else status.HTTP_304_NOT_MODIFIED
 
 
 @app.get('/dump')
@@ -129,9 +164,6 @@ async def dump_data(request: Request):
         stmt = select(db.Knowledge)
         result = await session.execute(stmt)
         result = result.scalars().all()
-        logger: logging.Logger = request.app.state.logger
-        if result:
-            logger.info(f'Size of the 1st emb: {result[0].vector.shape}')
         return result
 
 @app.get('/search', response_model=list[SearchResult])

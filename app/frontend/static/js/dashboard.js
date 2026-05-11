@@ -1,4 +1,6 @@
 
+// Global functions
+
 async function reloadDocuments() {
     const documentsList = document.getElementById('documents-list');
     documentsList.innerHTML = 'Загрузка...';
@@ -38,11 +40,21 @@ async function reloadDocuments() {
         });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    reloadDocuments();
+async function clearStatuses() {
+    const statusDivs = document.querySelectorAll('.status');
+    statusDivs.forEach(div => {
+        div.classList.remove('success', 'error', 'loader');
+    });
+}
+
+// On page load
+document.addEventListener('DOMContentLoaded', async function() {
+    await reloadDocuments();
 });
 
+// Reset database
 document.getElementById('reset-db-button').addEventListener('click', async function() {
+    clearStatuses();
     const statusDiv = document.getElementById('reset-db-status');
     statusDiv.classList.remove('success', 'error');
     statusDiv.classList.add('loader');
@@ -60,7 +72,29 @@ document.getElementById('reset-db-button').addEventListener('click', async funct
     await reloadDocuments();
 })
 
+// Clear database
+document.getElementById('clear-db-button').addEventListener('click', async function() {
+    clearStatuses();
+    const statusDiv = document.getElementById('clear-db-status');
+    statusDiv.classList.remove('success', 'error');
+    statusDiv.classList.add('loader');
+
+    const response = await fetch('/clear', {
+        method: 'POST'
+    });
+
+    statusDiv.classList.remove('loader');
+    if (!response.ok) {
+        statusDiv.classList.add('error');
+        throw new Error('Could not clear database');
+    }
+    statusDiv.classList.add('success');
+    await reloadDocuments();
+});
+
+// Refresh documents
 document.getElementById('refresh-button').addEventListener('click', async function() {
+    clearStatuses();
     const statusDiv = document.getElementById('refresh-status');
     statusDiv.classList.remove('success', 'error');
     statusDiv.classList.add('loader');
@@ -77,9 +111,53 @@ document.getElementById('refresh-button').addEventListener('click', async functi
         });
 });
 
+// Import documents from files
+const fileInput = document.getElementById('file-input');
+const uploadForm = document.getElementById('upload-form');
+uploadForm.addEventListener('submit', async function(event) {
+    event.preventDefault();
+    clearStatuses();
+    const statusDiv = document.getElementById('upload-status');
+    statusDiv.classList.remove('success', 'error');
+    statusDiv.classList.add('loader');
+    const files = fileInput.files;
+    if (files.length === 0) {
+        statusDiv.classList.remove('loader');
+        statusDiv.classList.add('error');
+        alert('Пожалуйста, выберите файл для загрузки');
+        return;
+    }
+    const formData = new FormData();
+    for (const file of files) {
+        formData.append('files', file);
+    }
+    await fetch('/import_data', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Could not upload file');
+        }
+        return response.json();
+    })
+    .then(result => {
+        statusDiv.classList.remove('loader');
+        statusDiv.classList.add('success');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        statusDiv.classList.remove('loader');
+        statusDiv.classList.add('error');
+    });
+    await reloadDocuments();
+});
+
+// Add document manually
 const addDocumentForm = document.getElementById('add-document-form');
 addDocumentForm.addEventListener('submit', async function(event) {
     event.preventDefault();
+    clearStatuses();
     const statusDiv = document.getElementById('add-document-status');
     statusDiv.classList.remove('success', 'error');
     statusDiv.classList.add('loader');

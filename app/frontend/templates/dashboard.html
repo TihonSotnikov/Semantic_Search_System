@@ -10,12 +10,21 @@
         <div class="dashboard-section">
             <h2>Управление базой</h2>
             <div class="dashboard-button-grid">
-                <button id="reset-db-button" class="dashboard-button">
-                    Очистить базу <div id="reset-db-status" class="status"></div>
+                <button id="reset-db-button" class="dashboard-button tooltip" data-tooltip="Очистить базу и импортировать данные по умолчанию">
+                    Сбросить базу <div id="reset-db-status" class="status"></div>
                 </button>
-                <button id="refresh-button" class="dashboard-button">
+                <button id="refresh-button" class="dashboard-button tooltip" data-tooltip="Обновить данные в области Просмотр документов">
                     Обновить список <div id="refresh-status" class="status"></div>
                 </button>
+                <button id="clear-db-button" class="dashboard-button tooltip" data-tooltip="Очистить базу данных от всех документов и векторов">
+                    Очистить базу <div id="clear-db-status" class="status"></div>
+                </button>
+                <form id="upload-form" class="dashboard-form outlined-box" enctype="multipart/form-data">
+                    <input type="file" id="file-input" name="file" class="dashboard-file-input" multiple accept=".json" required />
+                    <button type="submit" class="dashboard-button rightmost">
+                        Импорт <div id="upload-status" class="status"></div>
+                    </button>
+                </form>
             </div>
         </div>
         <div id="document-viewer" class="dashboard-section">

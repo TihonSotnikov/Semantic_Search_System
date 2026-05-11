@@ -7,6 +7,11 @@
 
 {% block content %}
     <div class="search-container">
+        <div id="links" class="abs-top-right">
+            <a href="{{ url_for('dashboard') }}" class="dashboard-link inline-flex">
+                <div class="settings-icon"></div> Панель управления
+            </a>
+        </div>
         <form id="search-form" class="search-form">
             <input type="text" id="search-input" class="search-input" placeholder="Поиск..." />
             <button type="submit" class="search-button">Поиск</button>
