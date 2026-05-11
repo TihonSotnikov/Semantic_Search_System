@@ -2,6 +2,10 @@ html {
     min-height: 100%;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 @import url(https://db.onlinewebfonts.com/c/309e9cbf5766691a7fb91c024e83b028?family=Acrom); 
 
 body {
@@ -32,7 +36,8 @@ button {
     font-size: 16px;
 }
 button:hover {
-    background-color: #53acdf;
+    background-color: #e6e6e6;
+    border: solid 1px #3338;
 }
 
 a {
@@ -40,6 +45,14 @@ a {
     font-family: 'Acrom';
     text-decoration: none;
 }
+
+h2 {
+    margin-left: 1em;
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+    font-family: 'Acrom';
+}
+
 
 .inline-flex {
     display: inline-flex;
