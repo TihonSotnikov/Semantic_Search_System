@@ -1,0 +1,54 @@
+html {
+    min-height: 100%;
+}
+
+@import url(https://db.onlinewebfonts.com/c/309e9cbf5766691a7fb91c024e83b028?family=Acrom); 
+
+body {
+    min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(lightblue, white);
+    color: #333;
+    margin: 0;
+    /* padding: 2rem; */
+}
+
+.container {
+    /* max-width: 600px; */
+    margin: 100px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+button {
+    background-color: #009688;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 16px;
+}
+button:hover {
+    background-color: #53acdf;
+}
+
+a {
+    color: #009688;
+    font-family: 'Acrom';
+    text-decoration: none;
+}
+
+.inline-flex {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.outlined-box {
+    border: 2px solid #0004;
+    border-radius: 8px;
+    padding: 8px;
+}

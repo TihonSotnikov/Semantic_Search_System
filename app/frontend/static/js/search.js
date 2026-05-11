@@ -10,8 +10,16 @@ document.getElementById('search-form').addEventListener('submit', function(event
             resultsDiv.innerHTML = '';
             data.forEach(item => {
                 const div = document.createElement('div');
-                div.innerHTML = `<p>${item[0]}</p><p><small>${item[1]}</small></p>`;
                 div.classList.add('result-item');
+                const title = document.createElement('h3');
+                title.textContent = item.title;
+                const text = document.createElement('p');
+                text.textContent = item.text;
+                const score = document.createElement('p');
+                score.textContent = `Score: ${item.score}`;
+                div.appendChild(title);
+                div.appendChild(text);
+                div.appendChild(score);
                 resultsDiv.appendChild(div);
             });
         })
