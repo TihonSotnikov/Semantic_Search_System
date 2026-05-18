@@ -1,15 +1,19 @@
 import logging
 import os
 import json
+import argparse
 from contextlib import asynccontextmanager
+from traceback import extract_tb
 from typing import Any
 
 import torch
+import uvicorn
+from sentence_transformers import SentenceTransformer
 from fastapi import FastAPI, HTTPException, status, Query, UploadFile, File
 from fastapi.requests import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
 from sqlalchemy.engine import CursorResult
 from sqlalchemy import select, update, insert, delete
 from pydantic import BaseModel, Field
@@ -37,21 +41,63 @@ class SearchResult(BaseModel):
     text: str = Field(...)
 
 
-engine = create_async_engine('sqlite+aiosqlite:///data.db')
-session_maker = async_sessionmaker(engine, expire_on_commit=False)
+engine: AsyncEngine
+model: SentenceTransformer
+session_maker: async_sessionmaker
+
+logger = logging.getLogger('uvicorn')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = ml.load_model(MODELS['gemma']).to(device)
+database_url = 'sqlite+aiosqlite:///data.db'
+model_name = MODELS['gemma']
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.logger = logging.getLogger('uvicorn')
+    global engine, session_maker, model
+    need_init = True
+    if (os.path.exists(os.path.join(ROOT, 'data.db')) and database_url == 'sqlite+aiosqlite:///data.db'):
+        need_init = False
+
+    engine = create_async_engine(database_url)
+    session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    model = ml.load_model(model_name).to(device)
     
     async with engine.begin() as conn:
         await conn.run_sync(db.Base.metadata.create_all)
+    
+    if need_init:
+        await database_reset()
 
     yield
     await engine.dispose()
+
+def embeddings_from_docs(documents: list[dict], model):
+    """
+    Объединяет заголовки с текстами из списка словарей,
+    извлекает из них векторные представления и
+    собирает список моделей, готовый к загрузке в базу данных.
+
+    Parameters
+    ----------
+    documents : list[dict]
+        Список словарей в формате
+        `[{"title": "...", "text": "..."},]`
+    model : SentenceTransformer
+        Инициализированная модель векторизации текста
+
+    Returns
+    -------
+    list[Knowledge]
+        Список записей для базы данных
+    """
+    prompts = [f'# {doc['title']}\n{doc['text']}' for doc in documents]
+    embeddings = ml.compute_embeddings(prompts, model)
+    
+    knowledge_list = [
+        db.Knowledge(title=doc['title'], text=doc['text'], vector=emb)
+        for doc, emb in zip(documents, embeddings)
+    ]
+    return knowledge_list
 
 
 app = FastAPI(lifespan=lifespan)
@@ -59,21 +105,23 @@ app.mount('/static', StaticFiles(directory='frontend/static'), name='static')
 app.include_router(frontend.router)
 
 
-# @app.get('/') # , response_class=HTMLResponse
-# async def index(request: Request):
-#     return {
-#         'message': 'Success'
-#     }
-#     # context = {
-#     #     "request": request,
-#     #     "title": 'DataBase Panel',
-#     # }
-#     # return templates.TemplateResponse(name="index.html", context=context)
-
 @app.post('/reset')
-async def database_reset(request: Request):
-    logger: logging.Logger = request.app.state.logger
-    
+async def database_reset():
+    """
+    Сброс базы знаний к состоянию по-умолчанию.
+    Очищает базу и импортирует стандартные документы из `/data/data.json`.
+
+    Returns
+    -------
+    Response
+        Пустой ответ со статусом:
+        - 200: Успешно
+
+    Raises
+    ------
+    HTTPException
+        - 500: Не удалось загрузить базу из `data.json`
+    """
     try:
         with open(os.path.join(ROOT, '../data/data.json'), encoding='utf8') as file:
             initial_data: list = json.load(file)
@@ -81,20 +129,14 @@ async def database_reset(request: Request):
         logger.error(f'Error loading initial data: {e}')
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, 'Failed to load initial data')
 
-    texts = [doc['text'] for doc in initial_data]
-    embeddings = ml.compute_embeddings(texts, model)
-    
-    knowledge_list = [
-        db.Knowledge(title=doc['title'], text=doc['text'], vector=emb)
-        for doc, emb in zip(initial_data, embeddings)
-    ]
+    knowledge_list = embeddings_from_docs(initial_data, model)
     async with session_maker() as session:
         stmt = delete(db.Knowledge)
         await session.execute(stmt)
         session.add_all(knowledge_list)
         await session.commit()
 
-    return {'message': 'Success'}
+    return Response(status_code=status.HTTP_200_OK)
 
 @app.post('/clear')
 async def database_clear(request: Request):
@@ -105,7 +147,7 @@ async def database_clear(request: Request):
         await session.execute(stmt)
         await session.commit()
 
-    return status.HTTP_200_OK
+    return Response(status_code=status.HTTP_200_OK)
 
 @app.post('/import_data')
 async def import_data(request: Request, files: list[UploadFile] = File(...)):
@@ -117,23 +159,26 @@ async def import_data(request: Request, files: list[UploadFile] = File(...)):
             try:
                 if file.content_type != 'application/json':
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, 'Invalid file type')
+                document_list = json.loads(await file.read())
                 
-                import_data = json.loads(await file.read())
-
-                texts = [doc['text'] for doc in import_data]
-                embeddings = ml.compute_embeddings(texts, model)
-                
-                knowledge_list = [
-                    db.Knowledge(title=doc['title'], text=doc['text'], vector=emb)
-                    for doc, emb in zip(import_data, embeddings)
-                ]
+                knowledge_list = embeddings_from_docs(document_list, model)
                 session.add_all(knowledge_list)
             except Exception as e:
-                logger.error(f'Error processing file {file.filename}: {e}')
+                stack = extract_tb(e.__traceback__)
+                tb_filename, tb_line_number, tb_func_name, tb_text = stack[-1]
+                logger.error(f'Error processing file {file.filename} at {tb_filename}:{tb_line_number} in {tb_func_name}')
                 files_failed.append(file.filename)
         await session.commit()
+    
+    if files_failed:
+        response = JSONResponse(
+            status_code=status.HTTP_207_MULTI_STATUS,
+            content={'files_failed': files_failed}
+        )
+    else:
+        response = Response(status_code=status.HTTP_200_OK)
         
-    return JSONResponse(status_code=status.HTTP_207_MULTI_STATUS, content={'files_failed': files_failed}) if files_failed else status.HTTP_200_OK
+    return response
 
 @app.post('/add_document')
 async def add_document(schema: DocumentSchema):
@@ -151,15 +196,41 @@ async def add_document(schema: DocumentSchema):
 
 @app.delete('/delete_document')
 async def delete_document(id: int):
+    """
+    Эндпоинт для одиночного удаления записи из базы знаний по id.
+
+    Parameters
+    ----------
+    id : int
+        Уникальный id записи.
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
     async with session_maker() as session:
         stmt = delete(db.Knowledge).where(db.Knowledge.id == id)
         result: CursorResult = await session.execute(stmt) # type: ignore
         await session.commit()
-    return status.HTTP_200_OK if (result.rowcount > 0) else status.HTTP_304_NOT_MODIFIED
+    if (result.rowcount > 0):
+        return JSONResponse({"status": "OK"}, status_code=status.HTTP_200_OK)
+    else:
+        return JSONResponse({"status": "Запись не найдена"}, status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get('/dump')
 async def dump_data(request: Request):
+    """
+    Эндпоинт для получения всей базы знаний
+    в формате JSON.
+
+    Returns
+    -------
+    JSONResponse
+        Список словарей в JSON формате.
+        `[ { "id": int, "title": str, "text": str } ]`
+    """
     async with session_maker() as session:
         stmt = select(db.Knowledge)
         result = await session.execute(stmt)
@@ -203,3 +274,45 @@ async def search(request: Request, text: str = Query(...), k: int = 3):
     logger.info('Results response:\n' + '\n'.join([f'{res.score}: {res.title}' for res in final_results]))
     
     return final_results
+
+def main():
+    global model_name, database_url
+    parser = argparse.ArgumentParser("Semantic Search System")
+    parser.add_argument(
+        '--database',
+        type=str,
+        default='sqlite+aiosqlite:///data.db',
+        help="URL базы данных для sqlalchemy.",
+        required=False
+        )
+    parser.add_argument(
+        '--model',
+        type=str,
+        default='google/embeddinggemma-300m',
+        help="Идентификатор модели векторизации текста с HF.",
+        required=False
+    )
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=8000,
+        help="Идентификатор модели векторизации текста с HF.",
+        required=False
+    )
+    parser.add_argument(
+        '--host',
+        type=str,
+        default='0.0.0.0',
+        help="Идентификатор модели векторизации текста с HF.",
+        required=False
+    )
+    args = parser.parse_args()
+
+    database_url = args.database
+    model_name = args.model
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port,
+        reload=True
+    )
