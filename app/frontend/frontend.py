@@ -10,8 +10,24 @@ templates = Jinja2Templates('frontend/templates')
 
 @router.get('/', response_class=HTMLResponse)
 def index(request: Request):
+    """
+    Главная страница поисковой системы.
+
+    Returns
+    -------
+    HTMLResponse
+        HTML страница.
+    """
     return templates.TemplateResponse(request, 'index.html', {})
 
 @router.get('/dashboard', response_class=HTMLResponse)
 def dashboard(request: Request):
+    """
+    Админ-панель сервиса.
+
+    Returns
+    -------
+    HTMLResponse
+        HTML страница
+    """
     return templates.TemplateResponse(request, 'dashboard.html', {})

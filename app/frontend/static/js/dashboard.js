@@ -43,7 +43,7 @@ async function reloadDocuments() {
 async function clearStatuses() {
     const statusDivs = document.querySelectorAll('.status');
     statusDivs.forEach(div => {
-        div.classList.remove('success', 'error', 'loader');
+        div.classList.remove('success', 'error', 'loader', 'alert');
     });
 }
 
@@ -112,13 +112,15 @@ document.getElementById('refresh-button').addEventListener('click', async functi
 });
 
 // Import documents from files
-const fileInput = document.getElementById('file-input');
 const uploadForm = document.getElementById('upload-form');
+const fileInput = document.getElementById('file-input');
+const uploadButton = document.getElementById('upload-button')
 uploadForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     clearStatuses();
+    uploadButton.classList.remove('tooltip')
+
     const statusDiv = document.getElementById('upload-status');
-    statusDiv.classList.remove('success', 'error');
     statusDiv.classList.add('loader');
     const files = fileInput.files;
     if (files.length === 0) {
@@ -131,19 +133,28 @@ uploadForm.addEventListener('submit', async function(event) {
     for (const file of files) {
         formData.append('files', file);
     }
+
     await fetch('/import_data', {
         method: 'POST',
         body: formData
     })
-    .then(response => {
+    .then(async response => {
         if (!response.ok) {
             throw new Error('Could not upload file');
         }
-        return response.json();
-    })
-    .then(result => {
-        statusDiv.classList.remove('loader');
-        statusDiv.classList.add('success');
+        if (response.status === 207)
+        {
+            const resp_json =  await response.json()
+            uploadButton.dataset.tooltip = `Не удалось обработать следующие файлы:\n\n${resp_json.files_failed.join('\n')}`
+            uploadButton.classList.add('tooltip')
+            statusDiv.classList.remove('loader');
+            statusDiv.classList.add('alert')
+        }
+        else
+        {
+            statusDiv.classList.remove('loader');
+            statusDiv.classList.add('success');
+        }
     })
     .catch(error => {
         console.error('Error:', error);
