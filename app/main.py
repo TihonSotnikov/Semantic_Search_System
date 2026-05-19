@@ -316,3 +316,7 @@ def main():
         port=args.port,
         reload=True
     )
+
+
+if __name__ == "__main__":
+    main()
