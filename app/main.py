@@ -23,6 +23,21 @@ import ml.ml_engine as ml
 from frontend import frontend
 
 
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s [%(name)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        force=True
+    )
+    logging.getLogger('uvicorn').handlers = logging.getLogger().handlers
+    logging.getLogger('uvicorn.access').handlers = logging.getLogger().handlers
+
+
+configure_logging()
+logger = logging.getLogger('semantic_search_system')
+
+
 ROOT = os.path.dirname(__file__)
 MODELS = {
     'gte': 'Alibaba-NLP/gte-multilingual-base',
@@ -45,7 +60,6 @@ engine: AsyncEngine
 model: SentenceTransformer
 session_maker: async_sessionmaker
 
-logger = logging.getLogger('uvicorn')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 database_url = 'sqlite+aiosqlite:///data.db'
 model_name = MODELS['gemma']
@@ -58,9 +72,14 @@ async def lifespan(app: FastAPI):
     if (os.path.exists(os.path.join(ROOT, 'data.db')) and database_url == 'sqlite+aiosqlite:///data.db'):
         need_init = False
 
+    app.state.logger = logger
+    logger.info('Initializing application lifecycle')
+    logger.info('Using database=%s model=%s device=%s', database_url, model_name, device)
+
     engine = create_async_engine(database_url)
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
     model = ml.load_model(model_name).to(device)
+    logger.info('Model loaded successfully')
     
     async with engine.begin() as conn:
         await conn.run_sync(db.Base.metadata.create_all)
@@ -69,6 +88,7 @@ async def lifespan(app: FastAPI):
         await database_reset()
 
     yield
+    logger.info('Disposing database engine')
     await engine.dispose()
 
 def embeddings_from_docs(documents: list[dict], model):
@@ -90,6 +110,7 @@ def embeddings_from_docs(documents: list[dict], model):
     list[Knowledge]
         Список записей для базы данных
     """
+    logger.debug('Creating embeddings for %d documents', len(documents))
     prompts = [f'# {doc['title']}\n{doc['text']}' for doc in documents]
     embeddings = ml.compute_embeddings(prompts, model)
     
@@ -97,6 +118,7 @@ def embeddings_from_docs(documents: list[dict], model):
         db.Knowledge(title=doc['title'], text=doc['text'], vector=emb)
         for doc, emb in zip(documents, embeddings)
     ]
+    logger.debug('Generated %d knowledge records', len(knowledge_list))
     return knowledge_list
 
 
@@ -122,11 +144,12 @@ async def database_reset():
     HTTPException
         - 500: Не удалось загрузить базу из `data.json`
     """
+    logger.info('Resetting knowledge base from default data file')
     try:
         with open(os.path.join(ROOT, '../data/data.json'), encoding='utf8') as file:
             initial_data: list = json.load(file)
     except Exception as e:
-        logger.error(f'Error loading initial data: {e}')
+        logger.error('Error loading initial data: %s', e, exc_info=True)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, 'Failed to load initial data')
 
     knowledge_list = embeddings_from_docs(initial_data, model)
@@ -141,12 +164,14 @@ async def database_reset():
 @app.post('/clear')
 async def database_clear(request: Request):
     logger: logging.Logger = request.app.state.logger
+    logger.info('Clearing all knowledge base records')
 
     async with session_maker() as session:
         stmt = delete(db.Knowledge)
         await session.execute(stmt)
         await session.commit()
 
+    logger.info('Knowledge base cleared successfully')
     return Response(status_code=status.HTTP_200_OK)
 
 @app.post('/import_data')
@@ -154,8 +179,10 @@ async def import_data(request: Request, files: list[UploadFile] = File(...)):
     logger: logging.Logger = request.app.state.logger
     files_failed = []
 
+    logger.info('Importing %d files', len(files))
     async with session_maker() as session:
         for file in files:
+            logger.info('Processing uploaded file %s content_type=%s', file.filename, file.content_type)
             try:
                 if file.content_type != 'application/json':
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, 'Invalid file type')
@@ -163,10 +190,11 @@ async def import_data(request: Request, files: list[UploadFile] = File(...)):
                 
                 knowledge_list = embeddings_from_docs(document_list, model)
                 session.add_all(knowledge_list)
+                logger.info('Successfully imported %d documents from %s', len(document_list), file.filename)
             except Exception as e:
                 stack = extract_tb(e.__traceback__)
                 tb_filename, tb_line_number, tb_func_name, tb_text = stack[-1]
-                logger.error(f'Error processing file {file.filename} at {tb_filename}:{tb_line_number} in {tb_func_name}')
+                logger.error('Error processing file %s at %s:%d in %s', file.filename, tb_filename, tb_line_number, tb_func_name, exc_info=True)
                 files_failed.append(file.filename)
         await session.commit()
     
@@ -182,6 +210,7 @@ async def import_data(request: Request, files: list[UploadFile] = File(...)):
 
 @app.post('/add_document')
 async def add_document(schema: DocumentSchema):
+    logger.info('Adding document title=%s', schema.title)
     async with session_maker() as session:
         vector = ml.compute_embeddings([schema.text], model)[0]
         value = db.Knowledge(
@@ -192,6 +221,7 @@ async def add_document(schema: DocumentSchema):
 
         session.add(value)
         await session.commit()
+    logger.info('Document added successfully')
     return status.HTTP_200_OK
 
 @app.delete('/delete_document')
@@ -199,8 +229,6 @@ async def delete_document(id: int):
     """
     Эндпоинт для одиночного удаления записи из базы знаний по id.
 
-    Parameters
-    ----------
     id : int
         Уникальный id записи.
 
@@ -209,13 +237,16 @@ async def delete_document(id: int):
     _type_
         _description_
     """
+    logger.info('Deleting document id=%s', id)
     async with session_maker() as session:
         stmt = delete(db.Knowledge).where(db.Knowledge.id == id)
         result: CursorResult = await session.execute(stmt) # type: ignore
         await session.commit()
     if (result.rowcount > 0):
+        logger.info('Document id=%s deleted', id)
         return JSONResponse({"status": "OK"}, status_code=status.HTTP_200_OK)
     else:
+        logger.warning('Document id=%s not found', id)
         return JSONResponse({"status": "Запись не найдена"}, status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -231,10 +262,12 @@ async def dump_data(request: Request):
         Список словарей в JSON формате.
         `[ { "id": int, "title": str, "text": str } ]`
     """
+    logger.info('Dumping all knowledge base records')
     async with session_maker() as session:
         stmt = select(db.Knowledge)
         result = await session.execute(stmt)
         result = result.scalars().all()
+        logger.info('Returning %d knowledge records', len(result))
         return result
 
 @app.get('/search', response_model=list[SearchResult])
@@ -243,6 +276,7 @@ async def search(request: Request, text: str = Query(...), k: int = 3):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, 'No text provided')
     
     logger: logging.Logger = request.app.state.logger
+    logger.info('Search request text=%s top_k=%d', text[:200], k)
     query_embedding = ml.encode_query(model, text).to(device)
     
     top_k_heap = []
@@ -271,7 +305,8 @@ async def search(request: Request, text: str = Query(...), k: int = 3):
         key=lambda x: x.score, 
         reverse=True
     )
-    logger.info('Results response:\n' + '\n'.join([f'{res.score}: {res.title}' for res in final_results]))
+    logger.info('Search results count=%d', len(final_results))
+    logger.debug('Results response:\n%s', '\n'.join([f'{res.score}: {res.title}' for res in final_results]))
     
     return final_results
 

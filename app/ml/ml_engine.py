@@ -1,8 +1,11 @@
 import heapq
+import logging
 from typing import List, Tuple, Any
 
 import torch
 from sentence_transformers import SentenceTransformer, util
+
+logger = logging.getLogger(__name__)
 
 
 def load_model(model_name: str = "cointegrated/rubert-tiny2") -> SentenceTransformer:
@@ -20,8 +23,10 @@ def load_model(model_name: str = "cointegrated/rubert-tiny2") -> SentenceTransfo
         Инициализированная модель.
     """
 
+    logger.info('Loading model %s', model_name)
     model = SentenceTransformer(model_name, trust_remote_code=True)
     model.max_seq_length = 2048
+    logger.info('Model %s loaded with max_seq_length=%d', model_name, model.max_seq_length)
     return model
 
 
@@ -42,12 +47,18 @@ def compute_embeddings(texts: List[str], model: SentenceTransformer) -> torch.Te
         Тензор эмбеддингов, оптимизированный для PyTorch.
     """
 
-    return model.encode(texts, convert_to_tensor=True)
+    logger.debug('Computing embeddings for %d texts', len(texts))
+    embeddings = model.encode(texts, convert_to_tensor=True)
+    logger.debug('Embeddings computed with shape %s', tuple(embeddings.shape))
+    return embeddings
 
 
 def encode_query(model: SentenceTransformer, query: str) -> torch.Tensor:
     """Кодирование запроса в вектор."""
-    return model.encode(query, convert_to_tensor=True)
+    logger.debug('Encoding search query length=%d', len(query))
+    encoding = model.encode(query, convert_to_tensor=True)
+    logger.debug('Query encoding shape=%s', tuple(encoding.shape))
+    return encoding
 
 
 def compute_batch_scores(
@@ -55,7 +66,9 @@ def compute_batch_scores(
     batch_embeddings: torch.Tensor
 ) -> torch.Tensor:
     """Вычисление косинусного сходства для батча."""
-    return util.cos_sim(query_embedding, batch_embeddings)[0]
+    scores = util.cos_sim(query_embedding, batch_embeddings)[0]
+    logger.debug('Computed batch scores shape=%s', tuple(scores.shape))
+    return scores
 
 
 def select_top_k(
