@@ -18,9 +18,14 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy import select, update, insert, delete
 from pydantic import BaseModel, Field
 
-import database.database as db
-import ml.ml_engine as ml
-from frontend import frontend
+try:
+    from app.database import database as db
+    from app.ml import ml_engine as ml
+    from app.frontend import frontend
+except ImportError:
+    import database.database as db
+    import ml.ml_engine as ml
+    from frontend import frontend
 
 
 def configure_logging() -> None:
@@ -123,7 +128,11 @@ def embeddings_from_docs(documents: list[dict], model):
 
 
 app = FastAPI(lifespan=lifespan)
-app.mount('/static', StaticFiles(directory='frontend/static'), name='static')
+app.mount(
+    '/static',
+    StaticFiles(directory=os.path.join(ROOT, 'frontend/static')),
+    name='static',
+)
 app.include_router(frontend.router)
 
 

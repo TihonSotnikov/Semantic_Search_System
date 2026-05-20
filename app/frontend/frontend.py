@@ -1,11 +1,14 @@
+import os
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 
 router = APIRouter(tags=['HTML'])
-templates = Jinja2Templates('frontend/templates')
+templates = Jinja2Templates(
+    os.path.join(os.path.dirname(__file__), 'templates')
+)
 
 
 @router.get('/', response_class=HTMLResponse)
