@@ -17,6 +17,14 @@ dependencies = [
     "uvicorn>=0.46.0",
 ]
 
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "app"
+
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cu126"
@@ -26,3 +34,9 @@ explicit = true
 torch = { index = "pytorch" }
 torchvision = { index = "pytorch" }
 torchaudio = { index = "pytorch" }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "ranx>=0.3.21",
+]

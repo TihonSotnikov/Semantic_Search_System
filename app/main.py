@@ -18,28 +18,20 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy import select, update, insert, delete
 from pydantic import BaseModel, Field
 
-try:
-    from app.database import database as db
-    from app.ml import ml_engine as ml
-    from app.frontend import frontend
-except ImportError:
-    import database.database as db
-    import ml.ml_engine as ml
-    from frontend import frontend
+from app.database import database as db
+from app.ml import ml_engine as ml
+from app.frontend import frontend
+from app.logger.logger import configure_logging, get_unified_logging_config
 
 
-def configure_logging() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s %(levelname)s [%(name)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        force=True
-    )
-    logging.getLogger('uvicorn').handlers = logging.getLogger().handlers
-    logging.getLogger('uvicorn.access').handlers = logging.getLogger().handlers
+logging_level = os.getenv('LOGGING', 'INFO')
+configure_logging(
+    "semantic_search_system",
+    "app.log",
+    logging._nameToLevel.get(logging_level, logging.INFO)
+)
+custom_log_config = get_unified_logging_config(logging_level)
 
-
-configure_logging()
 logger = logging.getLogger('semantic_search_system')
 
 
@@ -79,7 +71,9 @@ async def lifespan(app: FastAPI):
 
     app.state.logger = logger
     logger.info('Initializing application lifecycle')
-    logger.info('Using database=%s model=%s device=%s', database_url, model_name, device)
+    logger.info('Using database = %s', database_url)
+    logger.info('Using model = %s', model_name)
+    logger.info('Using device = %s', device)
 
     engine = create_async_engine(database_url)
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
@@ -93,6 +87,7 @@ async def lifespan(app: FastAPI):
         await database_reset()
 
     yield
+    
     logger.info('Disposing database engine')
     await engine.dispose()
 
@@ -271,7 +266,7 @@ async def dump_data(request: Request):
         Список словарей в JSON формате.
         `[ { "id": int, "title": str, "text": str } ]`
     """
-    logger.info('Dumping all knowledge base records')
+    logger.debug('Dumping all knowledge base records')
     async with session_maker() as session:
         stmt = select(db.Knowledge)
         result = await session.execute(stmt)
@@ -354,11 +349,12 @@ def main():
 
     database_url = args.database
     model_name = args.model
+    
     uvicorn.run(
         app,
         host=args.host,
         port=args.port,
-        reload=True
+        log_config=custom_log_config
     )
 
 
