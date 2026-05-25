@@ -1,0 +1,60 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  default:
+    (): uvicorn.logging.DefaultFormatter
+    fmt: "%(levelprefix)s %(message)s"
+    use_colors: null
+  access:
+    (): uvicorn.logging.AccessFormatter
+    fmt: '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s'
+  custom_colored:
+    (): app.logger.logger.ColoredFormatter
+    fmt: "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+  plain:
+    format: "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+
+handlers:
+  default:
+    formatter: custom_colored
+    class: logging.StreamHandler
+    stream: ext://sys.stderr
+  access:
+    formatter: custom_colored
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+  file:
+    class: logging.FileHandler
+    filename: app.log
+    mode: a
+    encoding: utf-8
+    formatter: plain
+
+loggers:
+  uvicorn:
+    handlers:
+      - default
+      - file
+    level: INFO
+    propagate: false
+  uvicorn.error:
+    handlers:
+      - default
+      - file
+    level: INFO
+    propagate: false
+  uvicorn.access:
+    handlers:
+      - access
+      - file
+    level: INFO
+    propagate: false
+  semantic_search_system:
+    handlers:
+      - default
+      - file
+    level: INFO
+    propagate: false
