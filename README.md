@@ -26,11 +26,12 @@ uv sync
 ```
 3. Запуск:
 ```sh
-cd app
-# С доступом только на локальном хосте:
-uv run uvicorn main:app --port 80
-# Или запуск на открытом хосте (с доступом из сети):
-uv run uvicorn main:app --port 80 --host 0.0.0.0
+# Через main.py
+uv run python app/main.py [OPTIONAL_ARGS]
+```
+```sh
+# Через uvicorn
+uv run uvicorn app.main:app [--port 80 --host 0.0.0.0]
 ```
 
 ### [Вариант 2] Legacy (не рекомендуется)
@@ -47,11 +48,12 @@ pip install -r requirements.txt
 ```
 4. Запуск:
 ```sh
-cd app
-# С доступом только на локальном хосте:
-uvicorn main:app --port 80
-# Или запуск на открытом хосте (с доступом из сети):
-uvicorn main:app --port 80 --host 0.0.0.0
+# Через main.py
+python app/main.py [OPTIONAL_ARGS]
+```
+```sh
+# Через uvicorn
+uvicorn app.main:app [--port 80 --host 0.0.0.0]
 ```
 
 ### Запуск в Docker
@@ -59,13 +61,17 @@ uvicorn main:app --port 80 --host 0.0.0.0
 `docker pull jwth32/semantic-ss`
 1. Запустить контейнер с нужными параметрами: \
 `docker run -e HF_TOKEN=<ВАШ_ТОКЕН_HUGGINGFACE> -d -p 80:8000 jwth32/semantic-ss [OPTIONAL_ARGS]` \
-_При запуске через Nginx лучше не давать контейнеру порт 80 напрямую_ \
+_При запуске через Nginx лучше не давать контейнеру порт 80 напрямую_
+
+### Параметры сервера
+При запуске сервера можно указать опциональные аргументы (см. выше).
 Список поддерживаемых аргументов с их значениями по-умолчанию: \
+#### Универсальные
 `--host 0.0.0.0` - Хост (0.0.0.0 для доступа из сети) \
 `--port 8000` - Порт в докере \
+#### Только через `main.py или Docker`
 `--database sqlite+aiosqlite:///data.db` - URL базы данных (можно использовать какую-то внешнюю) \
-`--model google/embeddinggemma-300m` - Модель SentenceTransformers с HuggingFace \
-Для модели от Google нужен токен, привязанный к учётной записи HuggingFace.
+`--model google/embeddinggemma-300m` - Модель SentenceTransformers с HuggingFace
 
 ### Тестирование и использование
 
