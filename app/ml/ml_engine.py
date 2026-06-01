@@ -1,3 +1,4 @@
+import os
 import heapq
 import logging
 from typing import List, Tuple, Any
@@ -5,6 +6,15 @@ from typing import List, Tuple, Any
 import torch
 from sentence_transformers import SentenceTransformer, util
 
+from app.logger.logger import configure_logging
+
+
+logging_level = os.getenv('LOGGING', 'INFO')
+configure_logging(
+    __name__,
+    "app.log",
+    logging._nameToLevel.get(logging_level, logging.INFO)
+)
 logger = logging.getLogger(__name__)
 
 

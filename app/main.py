@@ -69,7 +69,6 @@ async def lifespan(app: FastAPI):
     if (os.path.exists(os.path.join(ROOT, 'data.db')) and database_url == 'sqlite+aiosqlite:///data.db'):
         need_init = False
 
-    app.state.logger = logger
     logger.info('Initializing application lifecycle')
     logger.info('Using database = %s', database_url)
     logger.info('Using model = %s', model_name)
@@ -165,9 +164,17 @@ async def database_reset():
 
     return Response(status_code=status.HTTP_200_OK)
 
+
 @app.post('/clear')
 async def database_clear(request: Request):
-    logger: logging.Logger = request.app.state.logger
+    """
+    Эндпоинт для полной очистки базы знаний.
+
+    Returns
+    -------
+    Response
+        HTTP-ответ.
+    """
     logger.info('Clearing all knowledge base records')
 
     async with session_maker() as session:
@@ -178,9 +185,37 @@ async def database_clear(request: Request):
     logger.info('Knowledge base cleared successfully')
     return Response(status_code=status.HTTP_200_OK)
 
+
 @app.post('/import_data')
 async def import_data(request: Request, files: list[UploadFile] = File(...)):
-    logger: logging.Logger = request.app.state.logger
+    """json
+    Эндпоинт для загрузки документов из массива JSON файлов. \\
+    Содержимое файлов должно иметь подобную структуру:
+    ```
+    [
+      {
+        "title": "Заголовок документа",
+        "text": "Текст документа"
+      }
+    ]
+    ```
+
+    Parameters
+    ----------
+    files : list[UploadFile], optional
+        Список файлов, который сервер получает от клиента (браузера).
+
+    Returns
+    -------
+    Response
+        Ответ со статусом операции. Если какие-то файлы не удалось обработать,\\
+        то в теле JSON-ответа будет список этих файлов.
+
+    Raises
+    ------
+    HTTPException
+        Недопустимый тип файла или другая непредведенная ошибка.
+    """
     files_failed = []
 
     logger.info('Importing %d files', len(files))
@@ -212,8 +247,25 @@ async def import_data(request: Request, files: list[UploadFile] = File(...)):
         
     return response
 
+
 @app.post('/add_document')
 async def add_document(schema: DocumentSchema):
+    """
+    Эндпоинт для ручного добавления одиночных документов в базу
+
+    Parameters
+    ----------
+    schema : DocumentSchema
+        Схема с данными для верификации.
+        Параметры HTTP-запроса:
+        - `title`: Заголовок
+        - `text`: Текст документа
+
+    Returns
+    -------
+    Response
+        - `200`: Успешно
+    """
     logger.info('Adding document title=%s', schema.title)
     async with session_maker() as session:
         vector = ml.compute_embeddings([schema.text], model)[0]
@@ -226,7 +278,7 @@ async def add_document(schema: DocumentSchema):
         session.add(value)
         await session.commit()
     logger.info('Document added successfully')
-    return status.HTTP_200_OK
+    return Response(status_code=status.HTTP_200_OK)
 
 @app.delete('/delete_document')
 async def delete_document(id: int):
@@ -274,12 +326,33 @@ async def dump_data(request: Request):
         logger.info('Returning %d knowledge records', len(result))
         return result
 
+
 @app.get('/search', response_model=list[SearchResult])
 async def search(request: Request, text: str = Query(...), k: int = 3):
+    """
+    Эндпоинт поискового запроса в базе данных.
+
+    Parameters
+    ----------
+    text : str
+        Текстовый поисковой запрос.
+    k : int, optional
+        Максимальное число возвращаемых результатов, by default 3
+
+    Returns
+    -------
+    list[SearchResult]
+        Список результатов с лучшим совпадением. \\
+        Клиент получает JSON-массив объектов.
+
+    Raises
+    ------
+    HTTPException
+        Если текст не может быть обработан.
+    """
     if not text:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, 'No text provided')
     
-    logger: logging.Logger = request.app.state.logger
     logger.info('Search request text=%s top_k=%d', text[:200], k)
     query_embedding = ml.encode_query(model, text).to(device)
     
@@ -313,6 +386,7 @@ async def search(request: Request, text: str = Query(...), k: int = 3):
     logger.debug('Results response:\n%s', '\n'.join([f'{res.score}: {res.title}' for res in final_results]))
     
     return final_results
+
 
 def main():
     global model_name, database_url
